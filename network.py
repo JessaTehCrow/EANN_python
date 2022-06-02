@@ -23,9 +23,9 @@ class Network():
     def predict(self, inputs:list) -> list:
         if len(inputs) != self.inputs:
             exit(f"\n[ERROR] FAILED TO PREDICT NEURAL NETWORK: Inputs length incorrect. Expected {self.inputs}, got {len(inputs)}\n")
-        
+
         self.log(f"Input length matches expected length ({self.inputs})")
-        
+
         prev_layer = inputs
         for layer in range(len(self.biases[:-1])):
             temp_layer = []
@@ -49,7 +49,12 @@ class Network():
             self.log(f"Layer {layer+1}: Finished successfully\n")
 
         self.log(f"Prediction finished without errors")
-        return prev_layer
+        out = [False]*len(prev_layer)
+        heighest = max(prev_layer)
+        out[prev_layer.index(heighest)] = True
+        # avg = sum(prev_layer)/len(prev_layer)
+        # out = [x>(avg*1.1) for x in prev_layer]
+        return out
 
 
 # Prepare a neural network with random inital weights/biases.
@@ -91,7 +96,7 @@ def mate(parent1:Network, parent2:Network, mutate_rate:float) -> Network:
         parent = random.uniform(0,1) > 0.5
         weights[layer] = deepcopy(parents[parent].weights[layer])
         biases[layer]  = deepcopy(parents[parent].biases[layer])
-    
+
     # Mutate genes
     #  Weights
     for l,layer in enumerate(weights[:-1]):
@@ -108,5 +113,27 @@ def mate(parent1:Network, parent2:Network, mutate_rate:float) -> Network:
 
 
 # Evolve an entire group of networks
-def evolve(networks:list, new_length:int) -> List[Network]:
-    ...
+def evolve(networks:list, new_length:int, mutate_rate:float, elitism:bool=False) -> List[Network]:
+    def random_parent(other_parent:Network=None) -> Network:
+        best = other_parent
+
+        while best == other_parent:
+            ais = [random.choice(networks) for _ in range(10)]
+            best = max(ais, key=lambda ai: ai.fitness)
+            # print(best.nn)
+            best = best.nn
+
+        return best
+    
+    new_ais = []
+    for ai in range(new_length):
+        parent1 = random_parent()
+        parent2 = random_parent(parent1)
+
+        ai = mate(parent1, parent2, mutate_rate)
+        new_ais.append(ai)
+    
+    if elitism:
+        new_ais[-1] = networks[0].nn
+
+    return new_ais
