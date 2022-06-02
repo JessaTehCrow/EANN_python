@@ -3,6 +3,7 @@ import numpy as np
 
 from copy import deepcopy
 from util import sigmoid
+from typing import List
 
 class Network():
     def __init__(self, inputs:int, weights:list, biases:list):
@@ -13,13 +14,13 @@ class Network():
     
 
     # Debugger
-    def log(self, *text):
+    def log(self, *text) -> None:
         if self._debug:
             print(*text)
 
 
     # Predict the solution to the input problem/senario
-    def predict(self, inputs:list):
+    def predict(self, inputs:list) -> list:
         if len(inputs) != self.inputs:
             exit(f"\n[ERROR] FAILED TO PREDICT NEURAL NETWORK: Inputs length incorrect. Expected {self.inputs}, got {len(inputs)}\n")
         
@@ -52,7 +53,7 @@ class Network():
 
 
 # Prepare a neural network with random inital weights/biases.
-def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int):
+def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int) -> Network:
     # Prepare variables
     weights = [[0]*inputs, *[[0]*hidden for x in range(hidden_layers)], [None]*outputs]
     biases  = [[None]*inputs, *[[0]*hidden for x in range(hidden_layers)], [0]*outputs]
@@ -80,7 +81,7 @@ def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int):
 # Mate 2 (parent) Neural networks together
 # This passes some genes of both parents (weights / biases) to the child, and mutates them slightly.
 # The mutation allows for better solutions.
-def mate(parent1:Network, parent2:Network, mutate_rate:float):
+def mate(parent1:Network, parent2:Network, mutate_rate:float) -> Network:
     parents = [parent1, parent2]
     weights = [None]*len(parent1.weights)
     biases  = [None]*len(parent1.weights)
@@ -104,3 +105,8 @@ def mate(parent1:Network, parent2:Network, mutate_rate:float):
             biases[l+1][n] += np.random.normal(0, mutate_rate)
     
     return Network(parent1.inputs, weights, biases)
+
+
+# Evolve an entire group of networks
+def evolve(networks:list, new_length:int) -> List[Network]:
+    ...

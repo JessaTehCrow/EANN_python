@@ -14,10 +14,10 @@ class Creature():
 
         self.thrust = thrust_power
         self.gravity = gravity
-        self.forces = [0, 0]
         self.velocity = [0, 0]
 
         self.survived_steps = 0
+        self.dead = False
 
     
     # Get the fitness of the AI
@@ -27,20 +27,22 @@ class Creature():
 
     # Predict solution from senario input
     def predict(self, inputs:list):
-
         return self.nn.predict(inputs)
     
 
     # Next step
     def next(self):
         middle_offset = (self.size[1]/2 - self.pos[1])*2/self.size[1]
+
         predictions = self.predict([middle_offset])
         thrust = predictions[0] > predictions[1]
-        self.forces = [0,thrust*self.thrust - self.gravity]
+        forces = [0,thrust*self.thrust - self.gravity]
 
-        self.velocity = [(x/60)+y for x,y in zip(self.forces,self.velocity)]
-        print(self.velocity)
+        self.velocity = [(x/60)+y for x,y in zip(forces,self.velocity)]
+        self.pos = [x+y for x,y in zip(self.pos, self.velocity)]
         
+        if not (0<self.pos[0]<self.size[0] and 0<self.pos[1]<self.size[1]):
+            self.dead = True
 
 
 class Game():
@@ -61,6 +63,19 @@ class Game():
         for ai in self.ais:
             ai.next()
 
+        return all([ai.dead for ai in self.ais])
+    
+
+    # Remove all saved networks
+    def reset(self):
+        self.ais = []
+    
+
+    # Get top ais based on their fitness
+    def get_top_ais(self, cut_off:int):
+        top = sorted(self.ais, key=lambda ai: ai.fitness, reverse=True)[:cut_off]
+        return top
+
 
 if __name__ == "__main__":
     # Game information
@@ -69,6 +84,7 @@ if __name__ == "__main__":
     creature_size = 1
     GTDR = 7 # Game to display ratio
     gravity = 3.6
+    game = Game(game_width, game_height, gravity)
 
     # Initialize pygame
     pygame.init()
@@ -87,6 +103,27 @@ if __name__ == "__main__":
 
     # Generate first generation
     ais = [random_network(inputs, hidden_layers, hidden, outputs) for ai in range(creatures)]
+    map(game.register_network, ais)
+
+    for generation in generations:
+        while not game.next():
+            # pygame event handler
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    exit("USER EXIT")
+
+            # Clear screen
+            screen.fill(0x333333)
+
+            # Draw ais
+            for ai in game.ais:
+                pygame.draw.circle(screen, 0xf4c7ff, [ai.pos[0]*GTDR, ai.pos[1]*GTDR], creature_size*GTDR)
+
+            # Display to user
+            pygame.display.flip()
+        
+        top_performers = game.get_top_ais(creatures//2)
+        evolve(top_performers, creatures)
 
     # Quit pygame
     pygame.quit()
