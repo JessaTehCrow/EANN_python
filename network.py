@@ -12,11 +12,13 @@ class Network():
         self.biases  = biases
     
 
+    # Debugger
     def log(self, *text):
         if self._debug:
             print(*text)
 
 
+    # Predict the solution to the input problem/senario
     def predict(self, inputs:list):
         if len(inputs) != self.inputs:
             exit(f"\n[ERROR] FAILED TO PREDICT NEURAL NETWORK: Inputs length incorrect. Expected {self.inputs}, got {len(inputs)}\n")
@@ -49,7 +51,7 @@ class Network():
         return prev_layer
 
 
-
+# Prepare a neural network with random inital weights/biases.
 def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int):
     # Prepare variables
     weights = [[0]*inputs, *[[0]*hidden for x in range(hidden_layers)], [None]*outputs]
@@ -75,6 +77,9 @@ def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int):
 
 
 
+# Mate 2 (parent) Neural networks together
+# This passes some genes of both parents (weights / biases) to the child, and mutates them slightly.
+# The mutation allows for better solutions.
 def mate(parent1:Network, parent2:Network, mutate_rate:float):
     parents = [parent1, parent2]
     weights = [None]*len(parent1.weights)
@@ -83,8 +88,8 @@ def mate(parent1:Network, parent2:Network, mutate_rate:float):
     # Pass on genes
     for layer in range(len(parent1.weights)):
         parent = random.uniform(0,1) > 0.5
-        weights[layer] = parents[parent].weights[layer]
-        biases[layer]  = parents[parent].biases[layer]
+        weights[layer] = deepcopy(parents[parent].weights[layer])
+        biases[layer]  = deepcopy(parents[parent].biases[layer])
     
     # Mutate genes
     #  Weights

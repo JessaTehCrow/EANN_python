@@ -2,20 +2,32 @@ from network import Network, random_network
 import pygame
 
 class Creature():
-    def __init__(self, network:Network):
+    def __init__(self, network:Network, thrust_power:float, map_size:list):
         self.nn = network
-        self.pos = [0,0]
 
+        self.pos = [0,0]
+        self.size = map_size
+
+        self.thrust = thrust_power
         self.forces = [0, 0]
         self.velocity = [0, 0]
+
+        self.survived_steps = 0
+
+    
+    # Get the fitness of the AI
+    def fitness(self):
+        return self.survived_steps**1.1//1
     
 
+    # Predict solution from senario input
     def predict(self, inputs:list):
         return self.nn.predict(inputs)
     
 
+    # Next step
     def next(self):
-        pass
+        self.forces = self.predict()
 
 
 class Game():
@@ -26,10 +38,12 @@ class Game():
         self.ais = []
     
     
+    # Add network to game data
     def register_network(self, ai:Network):
-        self.ais.append(ai)
+        self.ais.append( Creature(ai), [self.width,self.height] )
     
 
+    # Next step for all registered AIs
     def next(self):
         pass
 
