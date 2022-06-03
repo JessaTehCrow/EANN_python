@@ -1,4 +1,4 @@
-import pygame, random, time
+import pygame, random, time, math, json
 
 from network import Network, random_network, evolve
 from util import sigmoid
@@ -10,32 +10,43 @@ class Creature():
         self.nn = network
 
         self.size = map_size
-        self.pos = [self.size[0]/2, self.size[1]/2]
+        self.mid = [self.size[0]/2, self.size[1]/2]
+        self.pos = list(self.mid)
 
         self.thrust = thrust_power
         self.gravity = gravity
-        self.velocity = [0, 0]
+        self.velocity = [0,0]
 
         self.survived_steps = 0
         self.dead = False
         self.fitness = 0
 
-        self.target = [0,0]
+        self.spawn_margin = 80
+        self.spawn_min = 20
+
+        random_flip = False
+        self.target = [self.mid[0]+(20*random.choice([-1,1][not random_flip:])), self.mid[1]-20]
         self.closest = 0
+        self.hover_time = 0
+        self.heighest_hover_time = 0
         self.collected = 0
 
         self.color = random.randint(0,16041983)
-        self.new_target()
+        self._hover_time = 50
+        # self.new_target()
 
 
     # New target to collect
     def new_target(self):
-        self.target = [random.uniform(10,self.size[0]-10), random.uniform(10,self.size[1]-10)]
+        max = self.spawn_margin
+        min = self.spawn_min
+        ru = random.uniform
+        self.target = [self.mid[0]+ru(-max,-max), self.mid[1]+ru(-max,max)]
 
 
     # Get the fitness of the AI
     def get_fitness(self):
-        self.fitness = self.closest + self.collected*1000
+        self.fitness = self.survived_steps/10 + self.closest*10 + self.hover_time*2 + self.heighest_hover_time*10 + self.collected*1000
         return self.fitness
     
 
@@ -50,35 +61,57 @@ class Creature():
             x_off = (self.size[0]/2 - target[0])*2/self.size[0]
             y_off = (self.size[1]/2 - target[1])*2/self.size[1]
             return [x_off, y_off]
+
+        def distance(pos1,pos2):
+            return sum(map(abs,[(y-x)/2 for x,y in zip(pos1,pos2)]))
         
         limited_pos = get_offset(self.pos)
         target = get_offset(self.target)
 
-        limited_velocity = [sigmoid(x) for x in self.velocity]
-        old_target = [(y-x)/2 for x,y in zip(target, limited_pos)]
+        old_target = [(self.target[0] - self.pos[0]), (self.target[1] - self.pos[1])]
 
-        predictions = self.predict([*limited_pos, *limited_velocity, *old_target])
-        thrust = [predictions[1]-predictions[2], predictions[0]]
+        predictions = self.predict([*self.velocity, *old_target])
+
+        x_thrust = predictions[1] - predictions[2]
+        y_thrust = predictions[0]-0.1
+
+        thrust = [x_thrust, y_thrust]
 
         forces = [thrust[0]*self.thrust[0], -(thrust[1]*self.thrust[1])+self.gravity]
 
+        if predictions[3]>0.9:
+            forces = [self.velocity[0]*-0.1,forces[1]/5]
+
         self.velocity = [(x/60)+y for x,y in zip(forces,self.velocity)]
-        self.pos = [x+y for x,y in zip(self.pos, self.velocity)]
+        new_pos = [x+y for x,y in zip(self.pos, self.velocity)]
 
         target = get_offset(self.target)
-        pos = get_offset(self.pos)
-        distance = sum(map(abs,[(y-x)/2 for x,y in zip(target,pos)]))
+        pos = get_offset(new_pos)
+        dist = distance(target, pos)
+        abs_distance = abs(dist)
 
-        if abs(distance) <0.025:
-            self.collected += 1
-            self.closest = 1
-            self.new_target()
-
-        elif 1-abs(distance) > self.closest:
-            self.closest = 1-abs(distance)
         
-        if not (0<self.pos[0]<self.size[0] and 0<self.pos[1]<self.size[1]):
+        hover_distance = distance(get_offset([1,1]),get_offset([-1,-1]))
+        if abs_distance <hover_distance and self.hover_time < self._hover_time:
+            self.hover_time += 1
+            self.closest = 1
+
+        elif abs_distance <hover_distance and self.hover_time >= self._hover_time:
+            self.collected += 1
+            self.heighest_hover_time = 0
+            self.hover_time = 0
+            self.new_target()
+        
+        elif abs_distance >hover_distance and self.hover_time < self._hover_time:
+            self.heighest_hover_time = self.hover_time
+            self.hover_time = 0
+
+        elif 1-abs_distance > self.closest:
+            self.closest = 1-abs_distance
+        
+        if not (0<new_pos[0]<self.size[0] and 0<new_pos[1]<self.size[1]):
             self.dead = True
+        self.pos = new_pos
 
 
 class Game():
@@ -129,12 +162,12 @@ class Game():
 
 if __name__ == "__main__":
     # Game information
-    game_width = 150
-    game_height = 100
+    game_width = 300
+    game_height = 200
     creature_size = 1
-    target_size = 0.5
+    target_size = 0.3
     max_iterations = 2000
-    GTDR = 7 # Game to display ratio
+    GTDR = 5 # Game to display ratio
     gravity = 3.6
     game = Game(game_width, game_height, gravity, max_iterations)
 
@@ -142,48 +175,71 @@ if __name__ == "__main__":
     pygame.init()
     screen = pygame.display.set_mode([game_width*GTDR, game_height*GTDR])
     font = pygame.font.SysFont("unispacebold", 25)
+    RENDER = True
 
     # Define NN values
-    inputs        = 6
-    hidden_layers = 2
-    hidden        = 4
+    inputs        = 4
+    hidden        = [4, 8, 4]
+    hidden_layers = len(hidden)
     outputs       = 4
-    mutate_rate   = 0.03
+    mutate_rate   = 0.05
 
     # Define evolve information
-    creatures = 400
-    generations = 1000
+    creatures = 200
+    generations = 2000000
 
     # Generate first generation
     ais = [random_network(inputs, hidden_layers, hidden, outputs) for ai in range(creatures)]
+    averages = []
 
     for generation in range(generations):
         game.reset()
-        game.load_network(ais, 2, 5)
+        game.load_network(ais, 1, 5)
         while not game.next():
             # pygame event handler
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
+                    with open("fitness.json", 'w') as f:
+                        json.dump(averages, f)
+
                     exit("USER EXIT")
+                if event.type == pygame.KEYDOWN:
+                    key = event.key
+                    if key == pygame.K_r:
+                        RENDER = not RENDER
 
             # Clear screen
             screen.fill(0x111111)
+
+            def draw_text():
+                text_draw = [f"Generation: {generation}",
+                             f"Iteration: {game.iteration}", 
+                             f"Dead: {game.dead}/{creatures}"]
+                for i,text in enumerate(text_draw):
+                    img = font.render(text, True, (0, 200, 255))
+                    screen.blit(img,(10,10+(30*i)))
+                
+            if not RENDER:
+                draw_text()
+                pygame.display.flip()
+                continue
 
             # Draw ais
             for ai in game.ais:
                 pygame.draw.circle(screen, ai.color, [ai.pos[0]*GTDR, ai.pos[1]*GTDR], creature_size*GTDR)
                 pygame.draw.circle(screen, ai.color, [ai.target[0]*GTDR, ai.target[1]*GTDR], target_size*GTDR)
 
+            draw_text()
             # Display to user
-            text_draw = [f"Generation: {generation}",f"Iteration: {game.iteration}", f"Dead: {game.dead}/{creatures}"]
-            for i,text in enumerate(text_draw):
-                img = font.render(text, True, (0, 200, 255))
-                screen.blit(img,(10,10+(30*i)))
+            
             pygame.display.flip()
             # time.sleep(1/40)
             # time.sleep(1/25)
         
         top_performers = game.get_top_ais(creatures//2)
+        if not generation%10:
+            avg = sum([ai.fitness for ai in game.ais])/len(top_performers)
+            averages.append(avg)
         ais = evolve(top_performers, creatures, mutate_rate, True)
 
     # Quit pygame

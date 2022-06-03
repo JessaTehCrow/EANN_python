@@ -36,7 +36,7 @@ class Network():
                 value = 0
                 bias = self.biases[layer+1][neuron]
                 for w, weights in enumerate(self.weights[layer]):
-                    value = prev_layer[w]*weights[neuron]
+                    value += prev_layer[w]*weights[neuron]
 
                 value = sigmoid(value + bias)
                 temp_layer.append(value)
@@ -49,19 +49,20 @@ class Network():
             self.log(f"Layer {layer+1}: Finished successfully\n")
 
         self.log(f"Prediction finished without errors")
-        out = [False]*len(prev_layer)
+        out = [0]*len(prev_layer)
         heighest = max(prev_layer)
-        out[prev_layer.index(heighest)] = True
-        # avg = sum(prev_layer)/len(prev_layer)
-        # out = [x>(avg*1.1) for x in prev_layer]
+        out[prev_layer.index(heighest)] = prev_layer[prev_layer.index(heighest)]
+        # out = [x for x in prev_layer]
         return out
 
 
 # Prepare a neural network with random inital weights/biases.
 def random_network(inputs:int, hidden_layers:int, hidden:int, outputs:int) -> Network:
+    if len(hidden) != hidden_layers:
+        exit("Invalid layer amounts")
     # Prepare variables
-    weights = [[0]*inputs, *[[0]*hidden for x in range(hidden_layers)], [None]*outputs]
-    biases  = [[None]*inputs, *[[0]*hidden for x in range(hidden_layers)], [0]*outputs]
+    weights = [[0]*inputs, *[[0]*hidden[x] for x in range(hidden_layers)], [None]*outputs]
+    biases  = [[None]*inputs, *[[0]*hidden[x] for x in range(hidden_layers)], [0]*outputs]
 
     # Populate weights
     for l, layer in enumerate(weights[:-1]):
@@ -118,7 +119,7 @@ def evolve(networks:list, new_length:int, mutate_rate:float, elitism:bool=False)
         best = other_parent
 
         while best == other_parent:
-            ais = [random.choice(networks) for _ in range(10)]
+            ais = [random.choice(networks) for _ in range(len(networks)//5)]
             best = max(ais, key=lambda ai: ai.fitness)
             # print(best.nn)
             best = best.nn
