@@ -1,9 +1,10 @@
 import random
 import numpy as np
 
-from copy import deepcopy
-from util import sigmoid
+from numba import jit
 from typing import List
+from copy import deepcopy
+from util.funcs import sigmoid
 
 class Network():
     def __init__(self, inputs:int, weights:list, biases:list):
@@ -12,48 +13,43 @@ class Network():
         self.weights = weights
         self.biases  = biases
     
-
     # Debugger
     def log(self, *text) -> None:
         if self._debug:
             print(*text)
 
-
     # Predict the solution to the input problem/senario
     def predict(self, inputs:list) -> list:
         if len(inputs) != self.inputs:
             exit(f"\n[ERROR] FAILED TO PREDICT NEURAL NETWORK: Inputs length incorrect. Expected {self.inputs}, got {len(inputs)}\n")
+        
+        @jit
+        def compiled(inputs:list, biases:list, weights:list):
+            prev_layer = inputs
+            for layer in range(len(biases[:-1])):
+                temp_layer = []
 
-        self.log(f"Input length matches expected length ({self.inputs})")
+                # Calculate values for each neuron
+                for neuron in range(len(weights[layer+1])):
+                    value = 0
+                    bias = biases[layer+1][neuron]
+                    for w, weights in enumerate(weights[layer]):
+                        value += prev_layer[w]*weights[neuron]
 
-        prev_layer = inputs
-        for layer in range(len(self.biases[:-1])):
-            temp_layer = []
-            self.log(f"Layer {layer+1}/{len(self.biases)-1}: Process started")
+                    value = sigmoid(value + bias)
+                    temp_layer.append(value)
 
-            # Calculate values for each neuron
-            for neuron in range(len(self.weights[layer+1])):
-                value = 0
-                bias = self.biases[layer+1][neuron]
-                for w, weights in enumerate(self.weights[layer]):
-                    value += prev_layer[w]*weights[neuron]
+                # Reset previous layer to current layer
+                prev_layer = temp_layer
 
-                value = sigmoid(value + bias)
-                temp_layer.append(value)
+            out = [0]*len(prev_layer)
+            heighest = max(prev_layer)
+            out[prev_layer.index(heighest)] = prev_layer[prev_layer.index(heighest)]
+            # out = [x for x in prev_layer]
+            return out
 
-                self.log(f"Neuron [{neuron}] bias: {bias}")
-                self.log(f"Neuron [{neuron}]     = {value}")
+        return compiled(inputs, self.biases, self.weights)
 
-            # Reset previous layer to current layer
-            prev_layer = temp_layer
-            self.log(f"Layer {layer+1}: Finished successfully\n")
-
-        self.log(f"Prediction finished without errors")
-        out = [0]*len(prev_layer)
-        heighest = max(prev_layer)
-        out[prev_layer.index(heighest)] = prev_layer[prev_layer.index(heighest)]
-        # out = [x for x in prev_layer]
-        return out
 
 
 # Prepare a neural network with random inital weights/biases.
@@ -101,6 +97,11 @@ def mate(parent1:Network, parent2:Network, mutate_rate:float) -> Network:
     # Mutate genes
     #  Weights
     for l,layer in enumerate(weights[:-1]):
+        if random.uniform(0,1) < mutate_rate:
+            neuron = random.randint(0,len(weights[l])-1)
+            weights[l][neuron] = weights[l][neuron][::-1]
+            continue
+
         for n,neuron in enumerate(layer):
             for w,weight in enumerate(neuron):
                 weights[l][n][w] += np.random.normal(0, mutate_rate)
@@ -119,7 +120,7 @@ def evolve(networks:list, new_length:int, mutate_rate:float, elitism:bool=False)
         best = other_parent
 
         while best == other_parent:
-            ais = [random.choice(networks) for _ in range(len(networks)//5)]
+            ais = [random.choice(networks) for _ in range(25)]
             best = max(ais, key=lambda ai: ai.fitness)
             # print(best.nn)
             best = best.nn

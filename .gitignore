@@ -1,2 +1,9 @@
 # Directories
+#  pycache
 __pycache__/*
+util/__pycache__
+learning_envs/__pycache__
+learning_envs/*/__pycache__
+
+# Others
+learning_envs/*/generations/*.json
