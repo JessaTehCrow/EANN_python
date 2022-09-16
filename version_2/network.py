@@ -11,8 +11,9 @@ def empty_networks(amount:int, inputs:int, hidden_layers:list, outputs:int) -> L
     return biases, weights
 
 
-def get_output(inputs:np.ndarray, weights:list, biases:list, activation_function:callable):
-    out = np.reshape(sum(inputs.T*weights), [len(inputs[0]),len(biases[0])])
-    out2 = np.reshape(sum(out), [1,len(biases[0])])
+@jit(nopython=False)
+def get_output(inputs:np.ndarray, weights:np.ndarray, biases:np.ndarray, activation_function:callable):
+    out = np.reshape(np.sum(inputs.T*weights, 0), [len(inputs[0]),len(biases[0])])
+    out2 = np.reshape(np.sum(out, 0), [1,len(biases[0])])
 
     return activation_function(out2 + biases)

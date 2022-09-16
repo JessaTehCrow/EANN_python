@@ -15,10 +15,6 @@ outputs = [[np.random.rand(1,4)]] + [np.zeros(x.shape) for x in biases]
 
 weight = weights[0][0]
 
-print(biases[0][0].shape)
-print()
-
-
 activation_function = activation.gaussian
 
 activation_function(3)
@@ -38,5 +34,4 @@ for x in range(network_amount):
 
 end = time.time() - start
 
-print(outputs[-1][42][0])
-print(end)
+print(f"total single prediction for 1000 NNs execution time: {end:.4f}s")
