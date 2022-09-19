@@ -1,41 +1,40 @@
 import numpy as np
 
-from numba import jit
+from numba import njit, vectorize, prange
 
-@jit
+@vectorize
 def sigmoid(x):
     return 1 / (1-np.exp(-x))
 
 
-@jit
+@vectorize
 def bin_step(x):
     return x>0
 
-
-@jit
+@vectorize
 def gaussian(x):
     return np.exp(-x**2)
 
 
-@jit
+@vectorize
 def SiLU(x):
     return x/(1+np.exp(-x))
 
 
-@jit
+@vectorize
 def tanH(x):
     exp = np.exp(x)
     neg_exp = np.exp(-x)
     return (exp-neg_exp) / (exp+neg_exp)
 
 
-@jit
+@vectorize
 def SELU(x):
     l = 1.0507 
     a = 1.67326
 
     return l * (a*(np.exp(x)-1) if x<=0 else x)
 
-@jit
+@vectorize
 def RELU(x):
     return 0 if x<0 else x
