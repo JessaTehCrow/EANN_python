@@ -23,7 +23,7 @@ def SiLU(x):
 
 @vectorize
 def tanH(x):
-    return 1/(1+np.exp(-x))*2-1
+    return 1/(1+np.exp(-(2*x)))*2-1
 
 
 @vectorize
