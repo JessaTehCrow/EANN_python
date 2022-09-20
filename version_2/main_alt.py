@@ -14,6 +14,16 @@ def set_target(y, x=np.array([[]])):
         x[i,0:2] = value
 
 
+@njit(cache=True, parallel=True)
+def calculate_fitness(creatures:np.ndarray, output:np.ndarray):
+    for i in prange(creatures.shape[0]):
+        creature = creatures[i]
+        frames, collected, alive, distance = creature[6:10]
+        # Frametime, Collected, Dead, Closest distance
+        mults = (1, 100, 10, 10)
+
+        output[i] = frames*mults[0] + collected*mults[1] - (1-alive)*mults[2] + (mults[3]-distance)
+
 #                  x,    y
 bounds = np.array([300,  150])
 draw_scale = 4
@@ -26,12 +36,16 @@ screen = pygame.display.set_mode(bounds*draw_scale)
 
 # 100 networks of 4 inputs, 2 hidden layers, and 2 outputs
 network_amount = 2000
-biases, weights = empty_networks(network_amount, 4, [3,3], 2)
+biases, weights = empty_networks(network_amount, 4, [10,10], 2)
 
-# TargetX, TargetY. PosX, PosY. MotionX, MotionY. Frames, Collected, Alive.
-creatures = np.zeros((network_amount, 9))
+# 0        1        2     3     4        5        6       7          8      9
+# TargetX, TargetY; PosX, PosY; MotionX, MotionY; Frames, Collected, Alive; Closest;
+creatures = np.zeros((network_amount, 10))
 creatures[:,2:4] = middle # All starting positions in the middle of bounds
 creatures[:,8] = 1 # Set all creatures to be alive
+creatures[:,9] = 9999 # set all closest distance to infinite
+
+creature_colors = np.random.randint(0, 255, (network_amount,3))
 
 creature_speed = 3
 
@@ -58,7 +72,7 @@ for frame in range(2000):
             pygame.quit()
             exit()
 
-    screen.fill((0,0,0))
+    screen.fill((0,0,5))
 
     start = time.time()
 
@@ -75,6 +89,14 @@ for frame in range(2000):
     abs_distance = np.abs(distance)
     distance[:,:] /= bounds/10
  
+    # Set closest distance
+    sum_abs_distance = np.sum(abs_distance,1)
+    mask = creatures[:,9] > sum_abs_distance
+    creatures[:,9] *= (mask-1)*-1
+    creatures[:,9] += sum_abs_distance * mask
+    print(creatures[0,9])
+
+
     # Add frame time to creatures with distance less than max-distance
     creatures[:,6] += np.logical_and(abs_distance[:,0] < collect_distance, abs_distance[:,1] < collect_distance)
 
@@ -115,13 +137,10 @@ for frame in range(2000):
     targets = creatures[:,0:2]
     targets = np.unique(targets, axis=0)
 
-    if np.isnan(np.sum(creatures)):
-        print("NAN detected")
-
-    for position in creatures[:,2:4]:
+    for i, position in enumerate(creatures[:1,2:4]):
         position = position*draw_scale
         
-        pygame.draw.circle(screen, (255,255,255), position, draw_scale)
+        pygame.draw.circle(screen, creature_colors[i], position, draw_scale)
 
     for position in targets:
         position = position*draw_scale
@@ -139,8 +158,16 @@ for frame in range(2000):
     end = time.time() - start
     print(f"{1/end:.2f}, {end:.4f}")
 
+fitnesses = np.zeros(network_amount)
+
+calculate_fitness(creatures, fitnesses)
+
 total = time.time() - total
+indexes = np.argsort(fitnesses)
+
+for i in indexes[-10:]:
+    print(fitnesses[i])
 
 print(f"Total time: {total:.4f}s")
-print(f"Total frames: {frame}")
+print(f"Total frames: {frame+1}")
 print(f"Average time per frame: {total/(frame+1):.4f}")
