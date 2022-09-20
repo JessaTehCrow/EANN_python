@@ -25,7 +25,7 @@ pygame.init()
 screen = pygame.display.set_mode(bounds*draw_scale)
 
 # 100 networks of 4 inputs, 2 hidden layers, and 2 outputs
-network_amount = 1000
+network_amount = 2000
 biases, weights = empty_networks(network_amount, 4, [3,3], 2)
 
 # TargetX, TargetY. PosX, PosY. MotionX, MotionY. Frames, Collected, Alive.
@@ -73,7 +73,8 @@ for frame in range(2000):
     distance = np.reshape(creatures[:,0:4], (network_amount, 2,2))
     distance = np.subtract.reduce(distance, 1)
     abs_distance = np.abs(distance)
-
+    distance[:,:] /= bounds/10
+ 
     # Add frame time to creatures with distance less than max-distance
     creatures[:,6] += np.logical_and(abs_distance[:,0] < collect_distance, abs_distance[:,1] < collect_distance)
 
@@ -114,6 +115,9 @@ for frame in range(2000):
     targets = creatures[:,0:2]
     targets = np.unique(targets, axis=0)
 
+    if np.isnan(np.sum(creatures)):
+        print("NAN detected")
+
     for position in creatures[:,2:4]:
         position = position*draw_scale
         
@@ -130,11 +134,13 @@ for frame in range(2000):
         break
 
     
-    pygame.time.delay(400)
+    pygame.time.delay(1)
     pygame.display.flip()
     end = time.time() - start
     print(f"{1/end:.2f}, {end:.4f}")
 
 total = time.time() - total
-print(f"total time: {total:.4f}s")
+
+print(f"Total time: {total:.4f}s")
+print(f"Total frames: {frame}")
 print(f"Average time per frame: {total/(frame+1):.4f}")

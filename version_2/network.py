@@ -6,7 +6,7 @@ from numba import njit, prange
 
 
 def empty_networks(amount:int, inputs:int, hidden_layers:list, outputs:int) -> List[List[np.ndarray]]:
-    range = 5
+    range = 1
     biases  = [(np.random.rand(amount,1,x)-0.5)*2*range for x in [*hidden_layers, outputs]]
     weights = [(np.random.rand(amount,1,x*y)-0.5)*2*range for x,y in zip([inputs]+hidden_layers, hidden_layers+[outputs])]
 
