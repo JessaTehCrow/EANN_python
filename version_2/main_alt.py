@@ -47,7 +47,7 @@ screen = pygame.display.set_mode(bounds*draw_scale)
 
 # 100 networks of 4 inputs, 2 hidden layers, and 2 outputs
 network_amount = 2000
-biases, weights = empty_networks(network_amount, 4, [10,10], 2)
+biases, weights = empty_networks(network_amount, 4, [2,2,2], 2)
 
 #    0        1        2     3     4        5        6       7          8      9
 # TargetX, TargetY; PosX, PosY; MotionX, MotionY; Frames, Collected, Alive; Closest;

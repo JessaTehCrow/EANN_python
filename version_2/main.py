@@ -1,4 +1,4 @@
-import time
+import time, random
 import pygame
 
 import numpy as np
@@ -18,23 +18,47 @@ def set_target(y, x=np.array([[]])):
 def calculate_fitness(creatures:np.ndarray, output:np.ndarray):
     for i in prange(creatures.shape[0]):
         creature = creatures[i]
-        frames, collected, alive, distance = creature[6:10]
+        frames, collected, alive, distance, live_time = creature[6:11]
         # Frametime, Collected, Alive, Closest distance
-        mults = (1, 20, 100, 10)
+        mults = (5, 50, 100, 50, 0.01)
 
-        output[i] = frames*mults[0] + collected*mults[1] - alive*mults[2] + (mults[3]-distance)
-
-
-def reset_creatures(creatures):
-    creatures[:,:] = 0 # Reset all values to 0
-    creatures[:,2:4] = middle # All starting positions in the middle of bounds
-    creatures[:,8] = 1 # Set all creatures to be alive
-    creatures[:,9] = 9999 # set all closest distance to infinite
+        output[i] = frames*mults[0] + collected*mults[1] - alive*mults[2] + (mults[3] - distance) + (live_time*mults[4])
 
 
-def evolve_networks(weights:list, biases:list, fitnesses:np.ndarray, mutate_rate:float):
-    pass
+def evolve_networks(weights:list, biases:list, fitnesses:np.ndarray, mutate_rate:float, out_amount:int, cross_rate:float, parent_samples:int=3):
+    networks = fitnesses.shape[0]
+    new_weights = [np.zeros((out_amount, *x.shape[1:])) for x in weights]
+    new_biases  = [np.zeros((out_amount, *x.shape[1:])) for x in biases]
 
+    def get_parent(samples:int):
+        return fitnesses[max( np.random.randint(0,networks, (samples)) )]
+
+    for network in range(out_amount):
+        parents = [get_parent(parent_samples) for _ in range(2)]
+        order = np.zeros(len(new_weights), dtype=int)
+        
+        if random.random() < cross_rate:
+            start = random.randint(1,order.shape[0]-1)
+            order[start:] = 1
+        
+        for layer in range(len(weights)):
+            parent = parents[ order[layer] ]
+
+            mutation_weights = np.random.uniform(-mutate_rate, mutate_rate, weights[layer][0,:].shape)
+            mutation_biases  = np.random.uniform(-mutate_rate, mutate_rate, biases[layer][0,:].shape)
+
+            new_weights[layer][network,:] = weights[layer][parent,:] + mutation_weights
+            new_biases[layer][network,:]  = biases[layer][parent,:] + mutation_biases
+    
+
+    for layer in range(len(weights)):
+        l = 3
+        np.clip(new_weights[layer], -l,l, new_weights[layer])
+        np.clip(new_biases[layer], -l,l, new_biases[layer])
+    
+    return new_weights, new_biases
+
+# Creature world bounds
 #                  x,    y
 bounds = np.array([300,  150])
 draw_scale = 5
@@ -47,137 +71,153 @@ screen = pygame.display.set_mode(bounds*draw_scale)
 
 # 100 networks of 4 inputs, 2 hidden layers, and 2 outputs
 network_amount = 2000
-biases, weights = empty_networks(network_amount, 4, [10,10], 2)
-
-#    0        1        2     3     4        5        6       7          8      9
-# TargetX, TargetY; PosX, PosY; MotionX, MotionY; Frames, Collected, Alive; Closest;
-creatures = np.zeros((network_amount, 10))
-reset_creatures(creatures)
+biases, weights = empty_networks(network_amount, 4, [5,5,5], 2)
 
 creature_colors = np.random.randint(0, 255, (network_amount,3))
 
-creature_speed = 3
+creature_speed = 2
 
 collect_distance = 1
-collect_time = 3
+collect_time = 5
 
 target_fps = 60
 
 
 inputs = np.array([
-    [100,50],
-    [200,75],
+    [125,60],
+    [130,80],
     [75,100],
     [75,50]
 ])
 
 max_collected = len(inputs)
 
-total = time.time()
 
-for frame in range(2000):
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            exit()
+def simulate(weights:list, biases:list, frames:int, draw:bool=True, draw_amount:int=100):
+    #    0        1        2     3     4        5        6       7          8      9        10
+    # TargetX, TargetY; PosX, PosY; MotionX, MotionY; Frames, Collected, Alive; Closest; Alive time;
+    creatures = np.zeros((network_amount, 11))
+    creatures[:,2:4] = middle # All starting positions in the middle of bounds
+    creatures[:,8] = 1 # Set all creatures to be alive
+    creatures[:,9] = 9999 # set all closest distance to infinite
 
-    screen.fill((0,0,5))
+    total = time.time()
 
-    start = time.time()
+    for frame in range(frames):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
 
-    # Set new targets for creatures
-    set_target(inputs, creatures)
+        screen.fill((0,0,5))
 
-    # Get creature alive states
-    alive = np.reshape(creatures[:,8], (network_amount,1))
+        # Set new targets for creatures
+        set_target(inputs, creatures)
 
-    # Get creature target offsets
-    ## [Tx-Px, Ty-Py]
-    distance = np.reshape(creatures[:,0:4], (network_amount, 2,2))
-    distance = np.subtract.reduce(distance, 1)
-    abs_distance = np.abs(distance)
-    distance[:,:] /= bounds/10
+        # Get creature alive states
+        alive = np.reshape(creatures[:,8], (network_amount,1))
 
-    # Set closest distance
-    sum_abs_distance = np.sum(abs_distance,1)
-    mask = creatures[:,9] > sum_abs_distance
-    creatures[:,9] *= (mask-1)*-1
-    creatures[:,9] += sum_abs_distance * mask
+        # Add 1 to alive creature time
+        creatures[:,10] += alive[:,0]
 
-    # Add frame time to creatures with distance less than max-distance
-    creatures[:,6] += np.logical_and(abs_distance[:,0] < collect_distance, abs_distance[:,1] < collect_distance)
+        # Get creature target offsets
+        ## [Tx-Px, Ty-Py]
+        distance = np.reshape(creatures[:,0:4], (network_amount, 2,2))
+        distance = np.subtract.reduce(distance, 1)
+        abs_distance = np.abs(distance)
+        distance[:,:] /= bounds/10
 
-    # Add 1 to collected creatures with frame time > collect_time
-    creatures[:,7] += creatures[:,6] >= collect_time
+        # Set closest distance
+        sum_abs_distance = np.sum(abs_distance,1)
+        mask = creatures[:,9] > sum_abs_distance
+        creatures[:,9] *= (mask-1)*-1
+        creatures[:,9] += sum_abs_distance * mask
 
-    # Reset frame time
-    creatures[:,6] *= creatures[:,6] < collect_time
+        # Add frame time to creatures with distance less than max-distance
+        creatures[:,6] += np.logical_and(abs_distance[:,0] < collect_distance, abs_distance[:,1] < collect_distance)
 
-    # Get creatures' Motion
-    motion = creatures[:,4:6]
+        # Add 1 to collected creatures with frame time > collect_time
+        collected = creatures[:, 6] >= collect_time
+        creatures[:,7] += creatures[:,6] >= collect_time
 
-    # Combine target offsets & thrust into one array
-    ## [Ox, Oy, Mx, My]
-    inps = np.append(distance[:], motion, 1)
-    inps = np.reshape(inps, (network_amount, 1, 4))
+        # Reset frame time & closest distance
+        creatures[:,6] *= collected == 0
+        creatures[:,9] *= collected == 0
 
-    # Forward propagate using offset/motion inputs
-    prepared_outputs = [inps]+[np.zeros(x.shape) for x in biases]
-    new_motion = propagate_parallel(prepared_outputs, weights, biases)
+        # Get creatures' Motion
+        motion = creatures[:,4:6]
 
-    if np.isnan(np.sum(new_motion)):
-        print("NANs detected")
+        # Combine target offsets & thrust into one array
+        ## [Ox, Oy, Mx, My]
+        inps = np.append(distance[:], motion, 1)
+        inps = np.reshape(inps, (network_amount, 1, 4))
 
-    # Add output thrust to all creatures' motion
-    new_motion = np.reshape(new_motion, (network_amount, 2)) * creature_speed
-    creatures[:,4:6] += new_motion / target_fps
-    creatures[:,4:6] *= alive
+        # Forward propagate using offset/motion inputs
+        prepared_outputs = [inps]+[np.zeros(x.shape) for x in biases]
+        new_motion = propagate_parallel(prepared_outputs, weights, biases)
 
-    # Check creatures within box
-    within_box = np.sum(np.abs(np.floor(creatures[:, 2:4] / bounds)), 1)
-    within_box = np.reshape(within_box, (network_amount,1))
+        if np.isnan(np.sum(new_motion)):
+            print("NANs detected")
 
-    # Set creatures outside of bounding box or with max collected as dead
-    alive = np.logical_and(within_box[:,0] == 0, creatures[:,7] <= max_collected)
-    creatures[:,8] = alive
+        # Add output thrust to all creatures' motion
+        new_motion = np.reshape(new_motion, (network_amount, 2)) * creature_speed
+        creatures[:,4:6] += new_motion / target_fps
+        creatures[:,4:6] *= alive
 
-    # Update creature position
-    # print(creatures[0,2:4])
-    creatures[:,2:4] += creatures[:,4:6]
-    targets = creatures[:,0:2]
-    targets = np.unique(targets, axis=0)
+        # Check creatures within box
+        within_box = np.sum(np.abs(np.floor(creatures[:, 2:4] / bounds)), 1)
+        within_box = np.reshape(within_box, (network_amount,1))
 
-    for i, position in enumerate(creatures[:,2:4]):
-        position = position*draw_scale
-        
-        pygame.draw.circle(screen, creature_colors[i], position, draw_scale)
+        # Set creatures outside of bounding box or with max collected as dead
+        alive = np.logical_and(within_box[:,0] == 0, creatures[:,7] <= max_collected)
+        creatures[:,8] = alive
 
-    for position in targets:
-        position = position*draw_scale
+        # Update creature position
+        # print(creatures[0,2:4])
+        creatures[:,2:4] += creatures[:,4:6]
 
-        pygame.draw.circle(screen, (255,255,0), position, draw_scale/2)
-    
-    # Check if all creatures are dead
-    if np.sum(creatures[:,8]) == 0:
-        print("All creatures died")
-        break
+        if draw:
+            targets = creatures[:draw_amount,0:2]
+            targets = np.unique(targets, axis=0)
 
-    
-    pygame.time.delay(1)
-    pygame.display.flip()
-    end = time.time() - start
-    print(f"{1/end:.2f}, {end:.4f}")
+            for i, position in enumerate(creatures[:draw_amount,2:4]):
+                position = position*draw_scale
+                
+                pygame.draw.circle(screen, creature_colors[i], position, draw_scale)
 
-fitnesses = np.zeros(network_amount)
+            for position in targets:
+                position = position*draw_scale
 
-calculate_fitness(creatures, fitnesses)
+                pygame.draw.circle(screen, (255,255,0), position, draw_scale/2)
+            
+        # Check if all creatures are dead
+        if np.sum(creatures[:,8]) == 0:
+            break
 
-total = time.time() - total
-indexes = np.argsort(fitnesses)
+        pygame.display.flip()
 
-# for i in indexes[-100:]:
-#     print(fitnesses[i])
+    total = time.time() - total
+    print(f"AVG fps: {1/(total/frame):.2f}")
 
-print(f"Total time: {total:.4f}s")
-print(f"Total frames: {frame+1}")
-print(f"Average time per frame: {total/(frame+1):.4f}")
+    # Get creature fitesses
+    fitnesses = np.ones(network_amount)
+
+    calculate_fitness(creatures, fitnesses)
+    indexes = np.argsort(fitnesses)
+    return fitnesses, indexes
+
+
+for x in range(1000):
+    print("Generation",x)
+    frames = 1000 * (x//100+1)
+
+    # Get top creatures
+    fitnesses, indexes = simulate(weights, biases, 500, draw=True, draw_amount=300)
+    best = max(fitnesses)
+    avg = sum(fitnesses) / len(fitnesses)
+    print(f"Best: {best:.2f}")
+    print(f"AVG : {avg:.2f}")
+    print()
+
+    # Mate and mutate 100 creatures back into 2000
+    weights, biases = evolve_networks(weights, biases, indexes[-100:], 0.1, network_amount, 0.9, 10)
